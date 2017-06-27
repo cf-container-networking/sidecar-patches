@@ -1,0 +1,37 @@
+diff --git a/depot/containerstore/credmanager.go b/depot/containerstore/credmanager.go
+index 7358cb7..f69f695 100644
+--- a/depot/containerstore/credmanager.go
++++ b/depot/containerstore/credmanager.go
+@@ -12,6 +12,7 @@ import (
+ 	"os"
+ 	"path"
+ 	"path/filepath"
++	"strings"
+ 	"time"
+ 
+ 	uuid "github.com/nu7hatch/gouuid"
+@@ -288,6 +289,16 @@ func pemEncode(bytes []byte, blockType string, writer io.Writer) error {
+ 	return pem.Encode(writer, block)
+ }
+ 
++func getAppNameFromOUs(orgUnits []string) []string {
++	// remote prefix, e.g. app:guid --> guid
++	results := []string{}
++	for _, orgUnit := range orgUnits {
++		results = append(results, strings.TrimPrefix(orgUnit, "app:"))
++	}
++
++	return results
++}
++
+ func createCertificateTemplate(ipaddress, guid string, notBefore, notAfter time.Time, organizationalUnits []string) *x509.Certificate {
+ 	return &x509.Certificate{
+ 		SerialNumber: big.NewInt(0),
+@@ -300,6 +311,7 @@ func createCertificateTemplate(ipaddress, guid string, notBefore, notAfter time.
+ 		NotAfter:    notAfter,
+ 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageKeyAgreement,
+ 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
++		DNSNames:    getAppNameFromOUs(organizationalUnits),
+ 	}
+ }
+ 

@@ -1,0 +1,29 @@
+diff --git a/lib/cloud_controller/diego/app_recipe_builder.rb b/lib/cloud_controller/diego/app_recipe_builder.rb
+index 5aeb69afb..4f7836405 100644
+--- a/lib/cloud_controller/diego/app_recipe_builder.rb
++++ b/lib/cloud_controller/diego/app_recipe_builder.rb
+@@ -182,6 +182,16 @@ module VCAP::CloudController
+         ))
+       end
+ 
++      def generate_envoy_action(user, environment_variables)
++        action(::Diego::Bbs::Models::RunAction.new(
++                 user:            user,
++                 path:            '/tmp/lifecycle/envoy-launcher',
++                 args:            [],
++                 env:             environment_variables,
++                 resource_limits: ::Diego::Bbs::Models::ResourceLimits.new(nofile: file_descriptor_limit),
++        ))
++      end
++
+       def generate_environment_variables(lrp_builder)
+         environment_variables = lrp_builder.port_environment_variables.clone
+ 
+@@ -198,6 +208,7 @@ module VCAP::CloudController
+         actions = []
+         actions << generate_app_action(lrp_builder.start_command, lrp_builder.action_user, environment_variables)
+         actions << generate_ssh_action(lrp_builder.action_user, environment_variables) if allow_ssh?
++        actions << generate_envoy_action(lrp_builder.action_user, environment_variables)
+         codependent(actions)
+       end
+ 

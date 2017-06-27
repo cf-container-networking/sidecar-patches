@@ -1,0 +1,73 @@
+diff --git a/envoy-launcher/main.go b/envoy-launcher/main.go
+new file mode 100644
+index 0000000..4751e88
+--- /dev/null
++++ b/envoy-launcher/main.go
+@@ -0,0 +1,67 @@
++package main
++
++import (
++	"fmt"
++	"io/ioutil"
++	"log"
++	"os"
++	"syscall"
++)
++
++const configTemplate = `{
++    "listeners": [{
++        "address": "tcp://0.0.0.0:10000",
++        "filters": [{
++            "type": "read",
++            "name": "tcp_proxy",
++            "config": {
++                "stat_prefix": "ingress_tcp",
++                "route_config": {
++                    "routes": [{
++                            "cluster": "service_local"
++                    }]
++                }
++            }
++        }],
++        "ssl_context": {
++          "cert_chain_file": "%s",
++          "private_key_file": "%s"
++        }
++    }],
++    "admin": {
++        "access_log_path": "/tmp/admin_access.log",
++        "address": "tcp://127.0.0.1:9901"
++    },
++    "cluster_manager": {
++        "clusters": [{
++            "name": "service_local",
++            "connect_timeout_ms": 250,
++            "type": "static",
++            "lb_type": "round_robin",
++            "hosts": [{
++                "url": "tcp://127.0.0.1:8080"
++            }]
++        }]
++    }
++}`
++
++const configFilePath = "/home/vcap/tmp/envoy-config.json"
++
++func main() {
++	certPath := os.Getenv("CF_INSTANCE_CERT")
++	keyPath := os.Getenv("CF_INSTANCE_KEY")
++	fullConfig := fmt.Sprintf(configTemplate, certPath, keyPath)
++	err := ioutil.WriteFile(configFilePath, []byte(fullConfig), os.ModePerm)
++	if err != nil {
++		log.Fatalf("writing config file: %s", err)
++	}
++
++	err = syscall.Exec("/tmp/lifecycle/envoy", []string{
++		"envoy",
++		"-c",
++		configFilePath,
++	}, os.Environ())
++	if err != nil {
++		log.Fatalf("exec: %s", err)
++	}
++}
