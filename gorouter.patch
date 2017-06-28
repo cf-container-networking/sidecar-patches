@@ -1,0 +1,200 @@
+diff --git a/main.go b/main.go
+index f2ce21f..4bb0549 100644
+--- a/main.go
++++ b/main.go
+@@ -2,6 +2,7 @@ package main
+ 
+ import (
+ 	"crypto/tls"
++	"crypto/x509"
+ 	"errors"
+ 	"net/url"
+ 	"sync/atomic"
+@@ -208,9 +209,36 @@ func buildProxy(logger goRouterLogger.Logger, c *config.Config, registry rregist
+ 		c.RouteServiceRecommendHttps,
+ 	)
+ 
++	// This is the Diego Instance Identity CA Cert
++	// In a real deployment, this would get injected by BOSH or something
++	rootCertPEM := `-----BEGIN CERTIFICATE-----
++MIIDPTCCAiWgAwIBAgIQWBtSaWs2jz6tgdXLJYFvXzANBgkqhkiG9w0BAQsFADBI
++MQwwCgYDVQQGEwNVU0ExFjAUBgNVBAoTDUNsb3VkIEZvdW5kcnkxIDAeBgNVBAMT
++F2RpZWdvSW5zdGFuY2VJZGVudGl0eUNBMB4XDTE3MDYyNzAwMDkyMFoXDTE4MDYy
++NzAwMDkyMFowSDEMMAoGA1UEBhMDVVNBMRYwFAYDVQQKEw1DbG91ZCBGb3VuZHJ5
++MSAwHgYDVQQDExdkaWVnb0luc3RhbmNlSWRlbnRpdHlDQTCCASIwDQYJKoZIhvcN
++AQEBBQADggEPADCCAQoCggEBAONrKdnO8PBqLgVLwhaCnIoNuUPSXqNaJvPARUyd
++OMqaMVxKs11eOUVfnW00kwbw8jzc06rB4aTI4BtPkB696QDqxppEAq0KTFwLzsBT
++eueQX42fKykFFsyorfi4c48pRk0A91h54b19DPxhuXd09/1JGze4KgJLIZnLNzIH
++fqbY76pRrsUSVQHPwJHc+XdTHd3YGA2dfb35mt8QMkhvw74su2Cx6NTes6b6Bysj
++k2PEDwn6sfWkvcz8WcoJkXDq/cAl9Dd7TNW2IM6qu5Xaz10QgslRz2p5IVkxjMot
++AA4x0shP3TufHUct2jBAjPzs3lNiZ4RWXuWtXvSFB3xGZBcCAwEAAaMjMCEwDgYD
++VR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
++AErCXCTS/q8zDIfFjTel+4b0kE1esyhVGCLvQqJRm/s//UySNxtdEP7lrF6fyRsA
++TYVKD/f0DXw74lh+ndRiBISR7qbDutjZJQoPc4Vrj+ZfpJYqxQHkkpaZZylNNbhE
++qEfqzKGyJRLdAAyFhjfqr7kcL4WMgDFD2wJ1HXUWzvGaUzuaAOcV/1k9cwFA4pWJ
++pJLbixVYJqdF17o5Tla8LO6FfEm1j2QDGxbtwDIhJVy6XfXd1g71iSYG8qNfE/rY
++oUYk2hQS4tHb3XQyvKX/VqGMjPkzGzujRTN3nBsl686Jf95uYDhmrVcY5r8dNJ1i
++Ms6wJ3GTaXx1sh9LWQ9B6TI=
++-----END CERTIFICATE-----
++`
++	certPool := x509.NewCertPool()
++	certPool.AppendCertsFromPEM([]byte(rootCertPEM))
++
+ 	tlsConfig := &tls.Config{
+ 		CipherSuites:       c.CipherSuites,
+ 		InsecureSkipVerify: c.SkipSSLValidation,
++		RootCAs:            certPool,
+ 	}
+ 
+ 	return proxy.NewProxy(logger, accessLogger, c, registry,
+diff --git a/proxy/proxy.go b/proxy/proxy.go
+index c536cf0..c213783 100644
+--- a/proxy/proxy.go
++++ b/proxy/proxy.go
+@@ -48,6 +48,8 @@ type proxy struct {
+ 	forceForwardedProtoHttps bool
+ 	defaultLoadBalance       string
+ 	bufferPool               httputil.BufferPool
++	config                   *config.Config
++	tlsConfig                *tls.Config
+ }
+ 
+ func NewProxy(
+@@ -74,26 +76,11 @@ func NewProxy(
+ 		forceForwardedProtoHttps: c.ForceForwardedProtoHttps,
+ 		defaultLoadBalance:       c.LoadBalance,
+ 		bufferPool:               NewBufferPool(),
++		config:                   c,
++		tlsConfig:                tlsConfig,
+ 	}
+ 
+-	httpTransport := &http.Transport{
+-		Dial: func(network, addr string) (net.Conn, error) {
+-			conn, err := net.DialTimeout(network, addr, 5*time.Second)
+-			if err != nil {
+-				return conn, err
+-			}
+-			if c.EndpointTimeout > 0 {
+-				err = conn.SetDeadline(time.Now().Add(c.EndpointTimeout))
+-			}
+-			return conn, err
+-		},
+-		DisableKeepAlives:   c.DisableKeepAlives,
+-		MaxIdleConns:        c.MaxIdleConns,
+-		IdleConnTimeout:     90 * time.Second, // setting the value to golang default transport
+-		MaxIdleConnsPerHost: c.MaxIdleConnsPerHost,
+-		DisableCompression:  true,
+-		TLSClientConfig:     tlsConfig,
+-	}
++	httpTransport := p.createBackendTransport("")
+ 
+ 	rproxy := &httputil.ReverseProxy{
+ 		Director:       p.setupProxyRequest,
+@@ -122,6 +109,29 @@ func NewProxy(
+ 	return n
+ }
+ 
++func (p *proxy) createBackendTransport(srvname string) *http.Transport {
++	tlsconfig := *p.tlsConfig
++	tlsconfig.ServerName = srvname
++	return &http.Transport{
++		Dial: func(network, addr string) (net.Conn, error) {
++			conn, err := net.DialTimeout(network, addr, 5*time.Second)
++			if err != nil {
++				return conn, err
++			}
++			if p.config.EndpointTimeout > 0 {
++				err = conn.SetDeadline(time.Now().Add(p.config.EndpointTimeout))
++			}
++			return conn, err
++		},
++		DisableKeepAlives:   p.config.DisableKeepAlives,
++		MaxIdleConns:        p.config.MaxIdleConns,
++		IdleConnTimeout:     90 * time.Second, // setting the value to golang default transport
++		MaxIdleConnsPerHost: p.config.MaxIdleConnsPerHost,
++		DisableCompression:  true,
++		TLSClientConfig:     &tlsconfig,
++	}
++}
++
+ func hostWithoutPort(req *http.Request) string {
+ 	host := req.Host
+ 
+@@ -136,6 +146,7 @@ func hostWithoutPort(req *http.Request) string {
+ 
+ func (p *proxy) proxyRoundTripper(transport round_tripper.ProxyRoundTripper, port uint16) round_tripper.ProxyRoundTripper {
+ 	return round_tripper.NewProxyRoundTripper(
++		p.createBackendTransport,
+ 		round_tripper.NewDropsondeRoundTripper(transport),
+ 		p.logger, p.traceKey, p.ip, p.defaultLoadBalance,
+ 		p.reporter, p.secureCookies,
+diff --git a/proxy/round_tripper/proxy_round_tripper.go b/proxy/round_tripper/proxy_round_tripper.go
+index b5cf1b3..5fe3ae3 100644
+--- a/proxy/round_tripper/proxy_round_tripper.go
++++ b/proxy/round_tripper/proxy_round_tripper.go
+@@ -35,6 +35,7 @@ type ProxyRoundTripper interface {
+ type AfterRoundTrip func(req *http.Request, rsp *http.Response, endpoint *route.Endpoint, err error)
+ 
+ func NewProxyRoundTripper(
++	transportFactory func(string) *http.Transport,
+ 	transport ProxyRoundTripper,
+ 	logger logger.Logger,
+ 	traceKey string,
+@@ -53,6 +54,8 @@ func NewProxyRoundTripper(
+ 		combinedReporter:   combinedReporter,
+ 		secureCookies:      secureCookies,
+ 		localPort:          localPort,
++		tlsBackends:        make(map[string]*http.Transport),
++		transportFactory:   transportFactory,
+ 	}
+ }
+ 
+@@ -65,6 +68,8 @@ type roundTripper struct {
+ 	combinedReporter   metrics.CombinedReporter
+ 	secureCookies      bool
+ 	localPort          uint16
++	tlsBackends        map[string]*http.Transport
++	transportFactory   func(string) *http.Transport
+ }
+ 
+ func (rt *roundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+@@ -107,7 +112,21 @@ func (rt *roundTripper) RoundTrip(request *http.Request) (*http.Response, error)
+ 			logger = logger.With(zap.Nest("route-endpoint", endpoint.ToLogData()...))
+ 
+ 			logger.Debug("backend", zap.Int("attempt", retry))
+-			res, err = rt.backendRoundTrip(request, endpoint, iter)
++			// if application, assume we can reach it at the sidecar port
++			if endpoint.ApplicationId != "" {
++				logger.Debug("backend-app", zap.String("id", endpoint.ApplicationId))
++				transport, exist := rt.tlsBackends[endpoint.ApplicationId]
++				if !exist {
++					rt.logger.Info("TLS verification against", zap.String("applicationID", endpoint.ApplicationId))
++					transport = rt.transportFactory(endpoint.ApplicationId)
++					rt.tlsBackends[endpoint.ApplicationId] = transport
++				}
++				request.URL.Scheme = "https"
++				res, err = rt.backendRoundTrip(transport, request, endpoint, iter)
++			} else {
++				res, err = rt.backendRoundTrip(rt.transport, request, endpoint, iter)
++			}
++
+ 			if err == nil || !retryableError(err) {
+ 				break
+ 			}
+@@ -191,6 +210,7 @@ func (rt *roundTripper) CancelRequest(request *http.Request) {
+ }
+ 
+ func (rt *roundTripper) backendRoundTrip(
++	transport ProxyRoundTripper,
+ 	request *http.Request,
+ 	endpoint *route.Endpoint,
+ 	iter route.EndpointIterator,
+@@ -204,7 +224,7 @@ func (rt *roundTripper) backendRoundTrip(
+ 	iter.PreRequest(endpoint)
+ 
+ 	rt.combinedReporter.CaptureRoutingRequest(endpoint)
+-	res, err := rt.transport.RoundTrip(request)
++	res, err := transport.RoundTrip(request)
+ 
+ 	// decrement connection stats
+ 	iter.PostRequest(endpoint)
