@@ -1,9 +1,9 @@
 diff --git a/envoy-launcher/main.go b/envoy-launcher/main.go
 new file mode 100644
-index 0000000..4751e88
+index 0000000..f19e364
 --- /dev/null
 +++ b/envoy-launcher/main.go
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,74 @@
 +package main
 +
 +import (
@@ -16,7 +16,7 @@ index 0000000..4751e88
 +
 +const configTemplate = `{
 +    "listeners": [{
-+        "address": "tcp://0.0.0.0:10000",
++        "address": "tcp://0.0.0.0:%s",
 +        "filters": [{
 +            "type": "read",
 +            "name": "tcp_proxy",
@@ -45,7 +45,7 @@ index 0000000..4751e88
 +            "type": "static",
 +            "lb_type": "round_robin",
 +            "hosts": [{
-+                "url": "tcp://127.0.0.1:8080"
++                "url": "tcp://127.0.0.1:%s"
 +            }]
 +        }]
 +    }
@@ -56,7 +56,14 @@ index 0000000..4751e88
 +func main() {
 +	certPath := os.Getenv("CF_INSTANCE_CERT")
 +	keyPath := os.Getenv("CF_INSTANCE_KEY")
-+	fullConfig := fmt.Sprintf(configTemplate, certPath, keyPath)
++	appPort := os.Getenv("PORT")
++
++	tlsListenPort := os.Getenv("TLS_PORT")
++	if tlsListenPort == "" {
++		tlsListenPort = "10000"
++	}
++
++	fullConfig := fmt.Sprintf(configTemplate, tlsListenPort, certPath, keyPath, appPort)
 +	err := ioutil.WriteFile(configFilePath, []byte(fullConfig), os.ModePerm)
 +	if err != nil {
 +		log.Fatalf("writing config file: %s", err)

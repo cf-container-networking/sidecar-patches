@@ -1,3 +1,16 @@
+diff --git a/app/models/runtime/app.rb b/app/models/runtime/app.rb
+index 6c2ce0e5b..e89240537 100644
+--- a/app/models/runtime/app.rb
++++ b/app/models/runtime/app.rb
+@@ -27,7 +27,7 @@ module VCAP::CloudController
+     end
+ 
+     NO_APP_PORT_SPECIFIED = -1
+-    DEFAULT_HTTP_PORT     = 8080
++    DEFAULT_HTTP_PORT     = 8443
+     DEFAULT_PORTS         = [DEFAULT_HTTP_PORT].freeze
+ 
+     many_to_one :app, class: 'VCAP::CloudController::AppModel', key: :app_guid, primary_key: :guid, without_guid_generation: true
 diff --git a/lib/cloud_controller/diego/app_recipe_builder.rb b/lib/cloud_controller/diego/app_recipe_builder.rb
 index 5aeb69afb..4f7836405 100644
 --- a/lib/cloud_controller/diego/app_recipe_builder.rb
@@ -27,3 +40,30 @@ index 5aeb69afb..4f7836405 100644
          codependent(actions)
        end
  
+diff --git a/lib/cloud_controller/diego/buildpack/desired_lrp_builder.rb b/lib/cloud_controller/diego/buildpack/desired_lrp_builder.rb
+index 4616584a4..a24130681 100644
+--- a/lib/cloud_controller/diego/buildpack/desired_lrp_builder.rb
++++ b/lib/cloud_controller/diego/buildpack/desired_lrp_builder.rb
+@@ -56,7 +56,8 @@ module VCAP::CloudController
+ 
+         def port_environment_variables
+           [
+-            ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'PORT', value: ports.first.to_s),
++            ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'PORT', value: "8080"),
++            ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'TLS_PORT', value: ports.first.to_s),
+             ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'VCAP_APP_PORT', value: ports.first.to_s),
+             ::Diego::Bbs::Models::EnvironmentVariable.new(name: 'VCAP_APP_HOST', value: '0.0.0.0'),
+           ]
+diff --git a/lib/cloud_controller/diego/constants.rb b/lib/cloud_controller/diego/constants.rb
+index 671c32a1c..62e33b0ad 100644
+--- a/lib/cloud_controller/diego/constants.rb
++++ b/lib/cloud_controller/diego/constants.rb
+@@ -11,7 +11,7 @@ module VCAP::CloudController
+     RUNNING_TRUSTED_SYSTEM_CERT_PATH = '/etc/cf-system-certificates'.freeze
+     DEFAULT_FILE_DESCRIPTOR_LIMIT    = 1024
+     DEFAULT_LANG                     = 'en_US.UTF-8'.freeze
+-    DEFAULT_APP_PORT                 = 8080
++    DEFAULT_APP_PORT                 = 8443
+     DEFAULT_SSH_PORT                 = 2222
+     LRP_LOG_SOURCE                   = 'CELL'.freeze
+     TASK_LOG_SOURCE                  = 'CELL'.freeze
