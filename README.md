@@ -37,3 +37,5 @@ Deploy using a recent [cf-deployment](https://github.com/cloudfoundry/cf-deploym
 These two ports used to be the same (port 8080), but now they are different:
 - the port inside the container where the app listens (still 8080)
 - the port inside the container where ingress connections arrive from the routing tier (now 8443)
+
+We're working on [an Envoy SDS implementation here](https://github.com/cf-container-networking/envoy-test).
