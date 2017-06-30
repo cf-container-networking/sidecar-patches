@@ -1,9 +1,9 @@
 diff --git a/envoy-launcher/main.go b/envoy-launcher/main.go
 new file mode 100644
-index 0000000..f19e364
+index 0000000..9f81343
 --- /dev/null
 +++ b/envoy-launcher/main.go
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,141 @@
 +package main
 +
 +import (
@@ -33,7 +33,22 @@ index 0000000..f19e364
 +          "cert_chain_file": "%s",
 +          "private_key_file": "%s"
 +        }
-+    }],
++    },
++		{
++			"address": "tcp://0.0.0.0:9000",
++			"filters": [{
++					"type": "read",
++					"name": "tcp_proxy",
++					"config": {
++							"stat_prefix": "ingress_tcp",
++							"route_config": {
++									"routes": [{
++													"cluster": "service_app2"
++									}]
++							}
++					}
++			}]
++		}],
 +    "admin": {
 +        "access_log_path": "/tmp/admin_access.log",
 +        "address": "tcp://127.0.0.1:9901"
@@ -47,9 +62,56 @@ index 0000000..f19e364
 +            "hosts": [{
 +                "url": "tcp://127.0.0.1:%s"
 +            }]
-+        }]
++        },
++				{
++            "name": "service_app2",
++            "connect_timeout_ms": 2500,
++            "type": "sds",
++            "lb_type": "round_robin",
++            "service_name": "134d2f52-7b9a-4226-ad1c-c63ef033c07d",
++            "ssl_context": {
++              "cert_chain_file": "%s",
++              "private_key_file": "%s",
++              "ca_cert_file": "%s"
++            }
++				}],
++        "sds": {
++          "cluster": {
++            "name": "sds",
++            "connect_timeout_ms": 2500,
++            "type": "static",
++            "lb_type": "round_robin",
++            "hosts": [{
++							"url": "tcp://10.62.2.69:8080"
++            }]
++          },
++          "refresh_delay_ms": 1000
++        }
 +    }
 +}`
++
++const diegoCACert = `-----BEGIN CERTIFICATE-----
++MIIDPTCCAiWgAwIBAgIQWBtSaWs2jz6tgdXLJYFvXzANBgkqhkiG9w0BAQsFADBI
++MQwwCgYDVQQGEwNVU0ExFjAUBgNVBAoTDUNsb3VkIEZvdW5kcnkxIDAeBgNVBAMT
++F2RpZWdvSW5zdGFuY2VJZGVudGl0eUNBMB4XDTE3MDYyNzAwMDkyMFoXDTE4MDYy
++NzAwMDkyMFowSDEMMAoGA1UEBhMDVVNBMRYwFAYDVQQKEw1DbG91ZCBGb3VuZHJ5
++MSAwHgYDVQQDExdkaWVnb0luc3RhbmNlSWRlbnRpdHlDQTCCASIwDQYJKoZIhvcN
++AQEBBQADggEPADCCAQoCggEBAONrKdnO8PBqLgVLwhaCnIoNuUPSXqNaJvPARUyd
++OMqaMVxKs11eOUVfnW00kwbw8jzc06rB4aTI4BtPkB696QDqxppEAq0KTFwLzsBT
++eueQX42fKykFFsyorfi4c48pRk0A91h54b19DPxhuXd09/1JGze4KgJLIZnLNzIH
++fqbY76pRrsUSVQHPwJHc+XdTHd3YGA2dfb35mt8QMkhvw74su2Cx6NTes6b6Bysj
++k2PEDwn6sfWkvcz8WcoJkXDq/cAl9Dd7TNW2IM6qu5Xaz10QgslRz2p5IVkxjMot
++AA4x0shP3TufHUct2jBAjPzs3lNiZ4RWXuWtXvSFB3xGZBcCAwEAAaMjMCEwDgYD
++VR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
++AErCXCTS/q8zDIfFjTel+4b0kE1esyhVGCLvQqJRm/s//UySNxtdEP7lrF6fyRsA
++TYVKD/f0DXw74lh+ndRiBISR7qbDutjZJQoPc4Vrj+ZfpJYqxQHkkpaZZylNNbhE
++qEfqzKGyJRLdAAyFhjfqr7kcL4WMgDFD2wJ1HXUWzvGaUzuaAOcV/1k9cwFA4pWJ
++pJLbixVYJqdF17o5Tla8LO6FfEm1j2QDGxbtwDIhJVy6XfXd1g71iSYG8qNfE/rY
++oUYk2hQS4tHb3XQyvKX/VqGMjPkzGzujRTN3nBsl686Jf95uYDhmrVcY5r8dNJ1i
++Ms6wJ3GTaXx1sh9LWQ9B6TI=
++-----END CERTIFICATE-----`
++
++const caCertPath = "/home/vcap/tmp/ca.crt"
 +
 +const configFilePath = "/home/vcap/tmp/envoy-config.json"
 +
@@ -63,8 +125,13 @@ index 0000000..f19e364
 +		tlsListenPort = "10000"
 +	}
 +
-+	fullConfig := fmt.Sprintf(configTemplate, tlsListenPort, certPath, keyPath, appPort)
-+	err := ioutil.WriteFile(configFilePath, []byte(fullConfig), os.ModePerm)
++	err := ioutil.WriteFile(caCertPath, []byte(diegoCACert), os.ModePerm)
++	if err != nil {
++		log.Fatalf("writing ca file: %s", err)
++	}
++
++	fullConfig := fmt.Sprintf(configTemplate, tlsListenPort, certPath, keyPath, appPort, certPath, keyPath, caCertPath)
++	err = ioutil.WriteFile(configFilePath, []byte(fullConfig), os.ModePerm)
 +	if err != nil {
 +		log.Fatalf("writing config file: %s", err)
 +	}

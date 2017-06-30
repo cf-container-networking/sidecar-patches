@@ -1,5 +1,5 @@
 diff --git a/config/blobs.yml b/config/blobs.yml
-index 69d13edf..608ed666 100644
+index f261e869..3ffdb127 100644
 --- a/config/blobs.yml
 +++ b/config/blobs.yml
 @@ -1,3 +1,6 @@
@@ -10,10 +10,10 @@ index 69d13edf..608ed666 100644
    size: 90029041
    object_id: 0f353470-247b-4e57-443d-74db40025560
 diff --git a/packages/buildpack_app_lifecycle/packaging b/packages/buildpack_app_lifecycle/packaging
-index 2a4f0bed..e2072d8c 100644
+index 100ecc4b..31ab5106 100644
 --- a/packages/buildpack_app_lifecycle/packaging
 +++ b/packages/buildpack_app_lifecycle/packaging
-@@ -9,15 +9,18 @@ export PATH=$GOROOT/bin:$PATH
+@@ -9,15 +9,17 @@ export PATH=$GOROOT/bin:$PATH
  
  CGO_ENABLED=0 go build -a -installsuffix static code.cloudfoundry.org/buildpackapplifecycle/builder
  CGO_ENABLED=0 go build -a -installsuffix static code.cloudfoundry.org/buildpackapplifecycle/launcher
@@ -25,17 +25,16 @@ index 2a4f0bed..e2072d8c 100644
  done
  
  tar -xzf /var/vcap/packages/diego-sshd/diego-sshd.tgz
- tar -xzf /var/vcap/packages/healthcheck/healthcheck.tgz
+ cp /var/vcap/packages/healthcheck/healthcheck .
++cp /var/vcap/packages/envoy/bin/envoy .
  
 -tar -czf ${BOSH_INSTALL_TARGET}/buildpack_app_lifecycle.tgz builder launcher healthcheck diego-sshd
-+cp /var/vcap/packages/envoy/bin/envoy .
-+
 +tar -czf ${BOSH_INSTALL_TARGET}/buildpack_app_lifecycle.tgz builder launcher healthcheck diego-sshd envoy envoy-launcher
  
  # clean up source artifacts
  rm -rf ${BOSH_INSTALL_TARGET}/src ${BOSH_INSTALL_TARGET}/pkg
 diff --git a/packages/buildpack_app_lifecycle/spec b/packages/buildpack_app_lifecycle/spec
-index 29729b5b..03df7719 100644
+index 29729b5b..8a8c20fc 100644
 --- a/packages/buildpack_app_lifecycle/spec
 +++ b/packages/buildpack_app_lifecycle/spec
 @@ -5,6 +5,7 @@ dependencies:
@@ -46,24 +45,25 @@ index 29729b5b..03df7719 100644
  
  files:
    - code.cloudfoundry.org/archiver/compressor/*.go # gosub
-@@ -13,6 +14,7 @@ files:
+@@ -12,6 +13,7 @@ files:
+   - code.cloudfoundry.org/buildpackapplifecycle/*.go # gosub
    - code.cloudfoundry.org/buildpackapplifecycle/builder/*.go # gosub
    - code.cloudfoundry.org/buildpackapplifecycle/buildpackrunner/*.go # gosub
++  - code.cloudfoundry.org/buildpackapplifecycle/envoy-launcher/*.go
    - code.cloudfoundry.org/buildpackapplifecycle/launcher/*.go # gosub
-+  - code.cloudfoundry.org/buildpackapplifecycle/envoy-launcher/*.go # gosub
    - code.cloudfoundry.org/bytefmt/*.go # gosub
    - code.cloudfoundry.org/cacheddownloader/*.go # gosub
-   - code.cloudfoundry.org/lager/*.go # gosub
 diff --git a/packages/envoy/packaging b/packages/envoy/packaging
 new file mode 100644
-index 00000000..b4f66291
+index 00000000..f102a6ae
 --- /dev/null
 +++ b/packages/envoy/packaging
-@@ -0,0 +1,4 @@
+@@ -0,0 +1,5 @@
 +set -e
 +
 +mkdir -p ${BOSH_INSTALL_TARGET}/bin/
 +cp envoy/envoy ${BOSH_INSTALL_TARGET}/bin/envoy
++
 diff --git a/packages/envoy/spec b/packages/envoy/spec
 new file mode 100644
 index 00000000..64c2532f
