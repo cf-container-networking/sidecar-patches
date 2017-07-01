@@ -1,9 +1,9 @@
 diff --git a/envoy-launcher/main.go b/envoy-launcher/main.go
 new file mode 100644
-index 0000000..9f81343
+index 0000000..b81d591
 --- /dev/null
 +++ b/envoy-launcher/main.go
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,142 @@
 +package main
 +
 +import (
@@ -68,7 +68,7 @@ index 0000000..9f81343
 +            "connect_timeout_ms": 2500,
 +            "type": "sds",
 +            "lb_type": "round_robin",
-+            "service_name": "134d2f52-7b9a-4226-ad1c-c63ef033c07d",
++            "service_name": "b3bb5431-a0f0-422d-a530-cbe36fc57705",
 +            "ssl_context": {
 +              "cert_chain_file": "%s",
 +              "private_key_file": "%s",
@@ -82,7 +82,7 @@ index 0000000..9f81343
 +            "type": "static",
 +            "lb_type": "round_robin",
 +            "hosts": [{
-+							"url": "tcp://10.62.2.69:8080"
++							"url": "%s"
 +            }]
 +          },
 +          "refresh_delay_ms": 1000
@@ -119,6 +119,7 @@ index 0000000..9f81343
 +	certPath := os.Getenv("CF_INSTANCE_CERT")
 +	keyPath := os.Getenv("CF_INSTANCE_KEY")
 +	appPort := os.Getenv("PORT")
++	sdsURL := os.Getenv("SDS_URL")
 +
 +	tlsListenPort := os.Getenv("TLS_PORT")
 +	if tlsListenPort == "" {
@@ -130,7 +131,7 @@ index 0000000..9f81343
 +		log.Fatalf("writing ca file: %s", err)
 +	}
 +
-+	fullConfig := fmt.Sprintf(configTemplate, tlsListenPort, certPath, keyPath, appPort, certPath, keyPath, caCertPath)
++	fullConfig := fmt.Sprintf(configTemplate, tlsListenPort, certPath, keyPath, appPort, certPath, keyPath, caCertPath, sdsURL)
 +	err = ioutil.WriteFile(configFilePath, []byte(fullConfig), os.ModePerm)
 +	if err != nil {
 +		log.Fatalf("writing config file: %s", err)
